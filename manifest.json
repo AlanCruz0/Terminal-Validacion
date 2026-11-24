@@ -1,0 +1,50 @@
+{
+  "id": "./",
+  "name": "Control de Acceso · Terminal de validación",
+  "short_name": "Acceso",
+  "description": "Terminal para control de acceso a eventos cerrados: búsqueda predictiva de invitados en IndexedDB, validación instantánea y bitácora con marcas de tiempo, sin conexión.",
+  "lang": "es-MX",
+  "dir": "ltr",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0a1020",
+  "background_color": "#0a1020",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "screenshots/desktop-terminal.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Búsqueda predictiva de invitados en la terminal" },
+    { "src": "screenshots/desktop-permitido.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Pantalla verde de acceso permitido" },
+    { "src": "screenshots/mobile-terminal.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Terminal en el teléfono" },
+    { "src": "screenshots/mobile-ya-ingreso.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Pantalla roja: el invitado ya ingresó" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Validar acceso",
+      "short_name": "Validar",
+      "description": "Abrir la terminal lista para buscar o leer un folio",
+      "url": "./?view=terminal&source=shortcut",
+      "icons": [{ "src": "icons/shortcut-validar.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Simular lectura de folio",
+      "short_name": "Simular",
+      "description": "Simular la lectura de un código y validarlo al instante",
+      "url": "./?view=terminal&action=simular&source=shortcut",
+      "icons": [{ "src": "icons/shortcut-simular.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Bitácora de accesos",
+      "short_name": "Bitácora",
+      "description": "Ver y exportar el registro de entradas",
+      "url": "./?view=log&source=shortcut",
+      "icons": [{ "src": "icons/shortcut-bitacora.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ]
+}

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Control de Acceso · Terminal de validación</title>
+  <meta name="description" content="Terminal PWA para control de acceso a eventos cerrados: búsqueda predictiva de invitados en IndexedDB, validación instantánea con pantalla verde/roja y bitácora con marcas de tiempo, todo sin conexión.">
+  <meta name="theme-color" content="#0a1020">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Acceso">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/db.js">
+  <link rel="modulepreload" href="js/utils.js">
+  <link rel="modulepreload" href="js/seed.js">
+</head>
+<body data-ui="loading">
+  <a class="skip-link" href="#search">Ir al buscador</a>
+
+  <!-- Pantalla de carga inicial (siembra de la base local) -->
+  <div id="loader" class="loader" role="status" aria-live="polite">
+    <img src="icons/favicon.svg" alt="" width="72" height="72">
+    <p class="loader-title">Preparando terminal…</p>
+    <p class="loader-detail" id="loader-detail">Abriendo base de datos local</p>
+    <div class="loader-track"><div class="loader-bar" id="loader-bar"></div></div>
+  </div>
+
+  <noscript><p class="noscript">Esta terminal necesita JavaScript habilitado para funcionar.</p></noscript>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/favicon.svg" alt="" width="40" height="40">
+        <div class="brand-text">
+          <h1 id="event-name">Control de Acceso</h1>
+          <p class="brand-sub">Terminal <span id="terminal-id" class="mono">—</span> · <span id="clock" class="mono">--:--:--</span></p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="net-status" class="pill pill-online" role="status"><span class="pill-dot" aria-hidden="true"></span><span id="net-label">En línea</span></span>
+        <button id="install-btn" class="btn btn-ghost btn-sm" type="button" aria-label="Instalar aplicación" hidden>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+          <span class="btn-label">Instalar</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="Resumen del evento">
+      <div class="stat stat-in"><span class="stat-value" id="stat-in">0</span><span class="stat-label">Ingresaron</span></div>
+      <div class="stat stat-pending"><span class="stat-value" id="stat-pending">0</span><span class="stat-label">Pendientes</span></div>
+      <div class="stat stat-blocked"><span class="stat-value" id="stat-blocked">0</span><span class="stat-label">Bloqueados</span></div>
+      <div class="stat stat-total"><span class="stat-value" id="stat-total">0</span><span class="stat-label">Invitados</span></div>
+      <div class="progress-wrap">
+        <div class="progress" id="progress" role="progressbar" aria-label="Avance de ingreso" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <span class="progress-label" id="progress-label">0 %</span>
+      </div>
+    </section>
+
+    <nav class="tabs" role="tablist" aria-label="Secciones">
+      <button class="tab" role="tab" type="button" id="tab-terminal" data-view="terminal" aria-controls="view-terminal" aria-selected="true">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg>
+        Terminal
+      </button>
+      <button class="tab" role="tab" type="button" id="tab-log" data-view="log" aria-controls="view-log" aria-selected="false" tabindex="-1">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+        Bitácora
+      </button>
+      <button class="tab" role="tab" type="button" id="tab-data" data-view="data" aria-controls="view-data" aria-selected="false" tabindex="-1">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        Datos
+      </button>
+    </nav>
+
+    <main id="main">
+      <!-- ============================== TERMINAL ============================== -->
+      <section class="view" id="view-terminal" role="tabpanel" aria-labelledby="tab-terminal">
+        <div class="terminal-grid">
+          <div class="panel search-panel">
+            <label class="search-label" for="search">Buscar invitado por nombre o folio</label>
+            <div class="search-box">
+              <svg class="icon search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+              <input id="search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="results" aria-describedby="search-hint"
+                     autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"
+                     placeholder="Ej. María López o 100245">
+              <kbd class="search-kbd" aria-hidden="true">Enter</kbd>
+            </div>
+            <div class="search-meta">
+              <span id="search-hint" class="search-hint">Escribe para buscar · ↑ ↓ para elegir · Enter para validar</span>
+              <span id="search-perf" class="search-perf mono" aria-live="polite"></span>
+            </div>
+            <div class="quick-actions">
+              <button class="btn btn-primary" type="button" id="sim-scan">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>
+                Simular lectura
+              </button>
+              <button class="btn" type="button" id="clear-search">Limpiar</button>
+              <span class="quick-tip">Tip: un lector de códigos que “teclea” el folio y presiona Enter funciona directo.</span>
+            </div>
+
+            <ul id="results" class="results" role="listbox" aria-label="Invitados encontrados"></ul>
+            <p id="results-more" class="results-more" hidden></p>
+
+            <div id="empty-state" class="empty-state">
+              <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg>
+              <p class="empty-title" id="empty-title">Listo para validar</p>
+              <p class="empty-text" id="empty-text">Escribe un nombre (ej. <span class="mono">gar</span>) o un folio (ej. <span class="mono">1002</span>). Los resultados aparecen mientras escribes, directo desde IndexedDB.</p>
+            </div>
+          </div>
+
+          <aside class="panel activity-panel" aria-labelledby="recent-title">
+            <div class="panel-head">
+              <h2 id="recent-title">Actividad reciente</h2>
+              <button class="btn btn-ghost btn-sm" type="button" data-goto="log">Ver bitácora</button>
+            </div>
+            <ol id="recent" class="log-list"></ol>
+            <p id="recent-empty" class="muted small">Aún no hay validaciones en esta sesión del evento.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================== BITÁCORA ============================== -->
+      <section class="view" id="view-log" role="tabpanel" aria-labelledby="tab-log" hidden>
+        <div class="panel">
+          <div class="panel-head wrap">
+            <h2>Bitácora de accesos</h2>
+            <div class="toolbar">
+              <label class="sr-only" for="log-filter">Filtrar bitácora</label>
+              <select id="log-filter" class="select">
+                <option value="all">Todos los registros</option>
+                <option value="granted">Accesos permitidos</option>
+                <option value="duplicate">Ya ingresó (duplicados)</option>
+                <option value="rejected">Denegados / no registrados</option>
+                <option value="undo">Anulaciones y reinicios</option>
+              </select>
+              <button class="btn" type="button" id="export-log-csv">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+                CSV
+              </button>
+              <button class="btn" type="button" id="export-log-json">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg>
+                JSON
+              </button>
+            </div>
+          </div>
+          <p class="muted small" id="log-summary">—</p>
+          <div class="table-wrap">
+            <table class="log-table">
+              <thead>
+                <tr><th scope="col">Hora</th><th scope="col">Folio</th><th scope="col">Invitado</th><th scope="col">Resultado</th><th scope="col">Terminal</th><th scope="col">Red</th></tr>
+              </thead>
+              <tbody id="log-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== DATOS ============================== -->
+      <section class="view" id="view-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+        <div class="cards">
+          <form class="panel card" id="settings-form">
+            <h2>Evento y terminal</h2>
+            <div class="field">
+              <label for="set-event">Nombre del evento</label>
+              <input id="set-event" name="eventName" type="text" maxlength="60" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="set-terminal">Identificador de terminal</label>
+              <input id="set-terminal" name="terminalId" type="text" maxlength="12" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="set-dismiss">Cerrar resultado automáticamente</label>
+              <select id="set-dismiss" name="autoDismiss" class="select">
+                <option value="1500">1.5 segundos</option>
+                <option value="2500">2.5 segundos</option>
+                <option value="4000">4 segundos</option>
+                <option value="0">No, cerrar manualmente</option>
+              </select>
+            </div>
+            <label class="check"><input type="checkbox" name="sound" id="set-sound"> Sonido de confirmación</label>
+            <label class="check"><input type="checkbox" name="vibrate" id="set-vibrate"> Vibración (en dispositivos compatibles)</label>
+            <p class="muted small">Los cambios se guardan al instante en IndexedDB.</p>
+          </form>
+
+          <section class="panel card" aria-labelledby="db-title">
+            <h2 id="db-title">Base de datos local</h2>
+            <dl class="kv">
+              <dt>Motor</dt><dd>IndexedDB · <span class="mono">control-acceso</span></dd>
+              <dt>Invitados</dt><dd id="db-guests">—</dd>
+              <dt>Registros en bitácora</dt><dd id="db-log">—</dd>
+              <dt>Origen de los datos</dt><dd id="db-source">—</dd>
+              <dt>Almacenamiento usado</dt><dd id="db-usage">—</dd>
+              <dt>Almacenamiento persistente</dt><dd id="db-persist">—</dd>
+            </dl>
+            <div class="row-actions">
+              <button class="btn" type="button" id="persist-btn">Solicitar persistencia</button>
+              <button class="btn" type="button" id="export-guests">Exportar invitados (CSV)</button>
+              <button class="btn btn-danger" type="button" id="reset-checkins">Reiniciar entradas</button>
+            </div>
+          </section>
+
+          <section class="panel card" aria-labelledby="load-title">
+            <h2 id="load-title">Cargar lista de invitados</h2>
+            <div class="field">
+              <label for="demo-size">Datos de demostración</label>
+              <div class="inline">
+                <select id="demo-size" class="select">
+                  <option value="1000">1,000 invitados</option>
+                  <option value="5000">5,000 invitados</option>
+                  <option value="10000" selected>10,000 invitados</option>
+                  <option value="25000">25,000 invitados</option>
+                  <option value="50000">50,000 invitados</option>
+                </select>
+                <button class="btn" type="button" id="regen-btn">Regenerar</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="import-file">Importar desde archivo (CSV o JSON)</label>
+              <input id="import-file" type="file" accept=".csv,.json,text/csv,application/json" class="file">
+            </div>
+            <button class="btn btn-ghost btn-sm" type="button" id="template-btn">Descargar plantilla CSV</button>
+            <p class="muted small">Cargar una lista nueva reemplaza a los invitados actuales y reinicia la bitácora.</p>
+          </section>
+
+          <section class="panel card" aria-labelledby="bench-title">
+            <h2 id="bench-title">Rendimiento de búsqueda</h2>
+            <p class="muted small">Ejecuta cientos de consultas reales (prefijos de nombre, apellido y folio) contra IndexedDB y mide el tiempo de respuesta.</p>
+            <button class="btn btn-primary" type="button" id="bench-btn">Ejecutar prueba</button>
+            <dl class="kv" id="bench-out" hidden>
+              <dt>Consultas</dt><dd id="bench-n">—</dd>
+              <dt>Promedio</dt><dd id="bench-avg">—</dd>
+              <dt>Mediana (p50)</dt><dd id="bench-p50">—</dd>
+              <dt>p95</dt><dd id="bench-p95">—</dd>
+              <dt>Máximo</dt><dd id="bench-max">—</dd>
+            </dl>
+          </section>
+
+          <section class="panel card" aria-labelledby="pwa-title">
+            <h2 id="pwa-title">Estado de la PWA</h2>
+            <dl class="kv">
+              <dt>Service Worker</dt><dd id="pwa-sw">—</dd>
+              <dt>Caché del App Shell</dt><dd id="pwa-cache">—</dd>
+              <dt>Modo de visualización</dt><dd id="pwa-display">—</dd>
+              <dt>Conexión</dt><dd id="pwa-net">—</dd>
+              <dt>Sincronía entre pestañas</dt><dd id="pwa-sync">—</dd>
+            </dl>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Funciona 100 % sin conexión · Los datos nunca salen de este dispositivo · Atajo: <kbd>/</kbd> para buscar</p>
+    </footer>
+  </div>
+
+  <!-- Pantalla completa de resultado de validación -->
+  <div id="overlay" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="overlay-title" aria-describedby="overlay-detail" hidden>
+    <div class="overlay-inner">
+      <div class="overlay-icon" id="overlay-icon"></div>
+      <p class="overlay-title" id="overlay-title">—</p>
+      <p class="overlay-name" id="overlay-name"></p>
+      <p class="overlay-detail" id="overlay-detail"></p>
+      <p class="overlay-meta mono" id="overlay-meta"></p>
+      <div class="overlay-actions">
+        <button class="btn btn-overlay" type="button" id="overlay-undo" hidden>Deshacer entrada</button>
+        <button class="btn btn-overlay btn-overlay-main" type="button" id="overlay-close">Continuar <kbd>Esc</kbd></button>
+      </div>
+    </div>
+    <div class="overlay-timer" aria-hidden="true"><span id="overlay-timer-bar"></span></div>
+  </div>
+
+  <div id="update-banner" class="update-banner" role="status" hidden>
+    <span>Hay una nueva versión de la terminal.</span>
+    <button class="btn btn-primary btn-sm" type="button" id="update-btn">Actualizar</button>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
